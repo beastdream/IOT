@@ -1,0 +1,9 @@
+# Native YOLO use: run from project root. No fallback paths.
+path: data/curated/v1
+train: train/images
+val: valid/images
+test: test/images
+nc: 2
+names:
+  0: With Helmet
+  1: Without Helmet

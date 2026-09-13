@@ -10,7 +10,7 @@ import statistics
 from PIL import Image
 import yaml
 
-from smart_helmet.foundation import EXPECTED_CLASSES, IMAGE_EXTENSIONS, SPLIT_FOLDERS, load_data_config
+from smart_helmet.foundation import EXPECTED_CLASSES, IMAGE_EXTENSIONS, SPLIT_FOLDERS, load_detection_config
 from smart_helmet.paths import PROJECT_ROOT, DATA_CONFIG, DATASET_AUDIT_DIR
 from .duplicates import (sha256_file, source_group_id, perceptual_hash, grouped_records,
                          exact_duplicates, near_duplicates, connected_group_count)
@@ -72,6 +72,16 @@ def calculate_status(fatal: bool, image_issues: list, annotation_issues: list, r
     return 'REVIEW_REQUIRED' if review else 'PASS'
 
 
+def audit_fingerprint(root, config, config_path):
+    dataset_root = Path(config['path']) if config else root
+    hashes = fingerprint(dataset_root)
+    if dataset_root == root:
+        return hashes
+    result = {(dataset_root / name).relative_to(root).as_posix(): digest for name,digest in hashes.items()}
+    result[Path(config_path).resolve().relative_to(root).as_posix()] = sha256_file(Path(config_path))
+    return result
+
+
 def run_audit(root=PROJECT_ROOT, config_path=DATA_CONFIG, output=DATASET_AUDIT_DIR, visuals=True):
     root, output = Path(root).resolve(), Path(output).resolve()
     # Only allow generated reports below results, never alongside source data.
@@ -80,8 +90,18 @@ def run_audit(root=PROJECT_ROOT, config_path=DATA_CONFIG, output=DATASET_AUDIT_D
     output.mkdir(parents=True, exist_ok=True)
     manifest, image_issues, annotation_issues, boxes, suspicious, manual = [], [], [], [], [], []
     fatal = []
+    config_path = Path(config_path)
+    if not config_path.is_absolute():
+        config_path = root / config_path
     try:
-        before = fingerprint(root)
+        config = load_detection_config(config_path, root)
+    except (OSError, ValueError, yaml.YAMLError) as error:
+        config = None
+        fatal.append(f'Config: {error}')
+    if config and Path(config['path']) != root and output == root / 'results/dataset_audit':
+        raise ValueError('Custom dataset requires a separate --output; raw audit evidence must not be overwritten')
+    try:
+        before = audit_fingerprint(root, config, config_path)
     except OSError as error:
         before = None
         fatal.append(f'Pre-audit fingerprint unavailable: {error}')
@@ -95,12 +115,6 @@ def run_audit(root=PROJECT_ROOT, config_path=DATA_CONFIG, output=DATASET_AUDIT_D
     def review(split, image, reason, details, severity='REVIEW'):
         manual.append(dict(split=split, image_path=image, reason=reason, severity=severity,
                            details=details, visualization_path='', manual_review_required=True))
-
-    try:
-        config = load_data_config(Path(config_path), root)
-    except (OSError, ValueError, yaml.YAMLError) as error:
-        config = None
-        fatal.append(f'Config: {error}')
 
     if config:
         for key, split in SPLIT_FOLDERS.items():
@@ -209,9 +223,21 @@ def run_audit(root=PROJECT_ROOT, config_path=DATA_CONFIG, output=DATASET_AUDIT_D
                     review(r['split'], r['image_path'], 'CROSS_SPLIT_SIMILARITY', 'Shared source group across splits', 'HIGH')
     for group in exact:
         for name in group['images'].split('|'):
-            review(name.split('/')[0], name, 'EXACT_DUPLICATE', f"SHA-256 group: {group['sha256']}", group['severity'])
+            review(next(r['split'] for r in manifest if r['image_path'] == name), name, 'EXACT_DUPLICATE', f"SHA-256 group: {group['sha256']}", group['severity'])
     near = near_duplicates(manifest)
+    curated = bool(config and Path(config['path']) == root / 'data/curated/v1')
+    reviewed_leakage = []
+    if curated:
+        from .curation import classify_curated_pairs
+        try:
+            reviewed_leakage = classify_curated_pairs(root, near)
+        except (OSError, ValueError, KeyError) as error:
+            fatal.append(f'Curated review provenance: {error}')
+    reviewed_pair_keys = {tuple(sorted((r['image_a'],r['image_b']))) for r in reviewed_leakage
+                          if r['review_status'] == 'REVIEWED_KEEP_BOTH_CANDIDATE'}
     for pair in near:
+        if tuple(sorted((pair['image_a'],pair['image_b']))) in reviewed_pair_keys:
+            continue
         reason = 'CROSS_SPLIT_SIMILARITY' if pair['cross_split'] else 'NEAR_DUPLICATE'
         for side, other in (('a', 'b'), ('b', 'a')):
             review(pair[f'split_{side}'], pair[f'image_{side}'], reason,
@@ -249,7 +275,7 @@ def run_audit(root=PROJECT_ROOT, config_path=DATA_CONFIG, output=DATASET_AUDIT_D
     for row in manual:
         row['visualization_path'] = '|'.join(viz.get(row['image_path'], []))
     try:
-        after = fingerprint(root)
+        after = audit_fingerprint(root, config, config_path)
         preserved = before is not None and before == after
     except OSError as error:
         after = None; preserved = False; fatal.append(f'Post-audit fingerprint unavailable: {error}')
@@ -270,6 +296,7 @@ def run_audit(root=PROJECT_ROOT, config_path=DATA_CONFIG, output=DATASET_AUDIT_D
                                images_with_multiple_objects=sum(r['number_of_objects'] > 1 for r in known),
                                images_with_unknown_or_invalid_labels=len(rows)-len(known))
     report = dict(
+        config_path=str(config_path.resolve()),
         dataset=dict(total_images=len(manifest), **{f'{s}_images': sum(r['split'] == s for r in manifest) for s in ('train','valid','test')},
                      total_annotations=len(boxes), total_nonblank_annotation_lines=sum(r['annotation_lines'] for r in manifest)),
         classes=dict(mapping=EXPECTED_CLASSES, counts={k: objects[k] for k in EXPECTED_CLASSES},
@@ -299,6 +326,10 @@ def run_audit(root=PROJECT_ROOT, config_path=DATA_CONFIG, output=DATASET_AUDIT_D
                          status_policy='Any structure/config/image/annotation ERROR => FAIL; candidates => REVIEW_REQUIRED; otherwise PASS'),
         fatal_errors=fatal,
         status=calculate_status(bool(fatal), image_issues, annotation_issues, manual))
+    if curated:
+        report['cross_split_review'] = dict(
+            reviewed_keep_both=sum(r['review_status'] == 'REVIEWED_KEEP_BOTH_CANDIDATE' for r in reviewed_leakage),
+            unreviewed=sum(r['review_status'] == 'UNREVIEWED_CROSS_SPLIT_CANDIDATE' for r in reviewed_leakage))
 
     tables = {
         'dataset_manifest': (manifest, 'split image_path label_path filename source_group_id image_width image_height file_size sha256 perceptual_hash number_of_objects with_helmet_count without_helmet_count decode_ok label_ok annotation_lines'),
@@ -319,6 +350,9 @@ def run_audit(root=PROJECT_ROOT, config_path=DATA_CONFIG, output=DATASET_AUDIT_D
     }
     for name, (rows, fields) in tables.items():
         write_csv(output / f'{name}.csv', rows, fields.split())
+    if curated:
+        write_csv(output / 'cross_split_review.csv', reviewed_leakage,
+                  'image_a image_b split_a split_b distance review_status review_id'.split())
     (output / 'dataset_fingerprint.json').write_text(json.dumps(dict(before=before, after=after, status=report['immutability']['status']), indent=2), encoding='utf-8')
     (output / 'dataset_audit_report.json').write_text(json.dumps(report, indent=2, allow_nan=False), encoding='utf-8')
     return report
@@ -326,7 +360,7 @@ def run_audit(root=PROJECT_ROOT, config_path=DATA_CONFIG, output=DATASET_AUDIT_D
 
 def print_report(report):
     print('=' * 43 + '\nSMART HELMET DATASET AUDIT\n' + '=' * 43)
-    print(f'Dataset config: {DATA_CONFIG}')
+    print(f"Dataset config: {report.get('config_path', DATA_CONFIG)}")
     for title, values in (
         ('Images', report['dataset']), ('Annotations', report['classes']),
         ('Integrity', dict(**report['images'], invalid_annotations=report['annotations']['invalid'])),

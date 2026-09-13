@@ -12,7 +12,7 @@ SPLIT_FOLDERS = {"train": "train", "val": "valid", "test": "test"}
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
 
 
-def load_data_config(config_path: Path = DATA_CONFIG, root: Path = PROJECT_ROOT) -> dict:
+def load_detection_config(config_path: Path = DATA_CONFIG, root: Path = PROJECT_ROOT) -> dict:
     """Resolve local YAML relative to the checkout root, independently of cwd.
 
     The returned mapping has absolute paths suitable for downstream code.
@@ -33,17 +33,25 @@ def load_data_config(config_path: Path = DATA_CONFIG, root: Path = PROJECT_ROOT)
     if not isinstance(base, str) or not base:
         raise ValueError("path must be a nonempty string")
     dataset_root = (root / base).resolve()
-    if dataset_root != root.resolve():
-        raise ValueError("Dataset root must remain the project root")
+    if not dataset_root.is_relative_to(root.resolve()):
+        raise ValueError("Dataset root must remain inside the project root")
     data["path"] = str(dataset_root)
     for split, folder in SPLIT_FOLDERS.items():
         value = data.get(split)
         if not isinstance(value, str) or not value:
             raise ValueError(f"Missing image path: {split}")
         resolved = (dataset_root / value).resolve()
-        if resolved != (root / folder / "images").resolve():
+        if resolved != (dataset_root / folder / "images").resolve():
             raise ValueError(f"Unexpected {split} path: {resolved}")
         data[split] = str(resolved)
+    return data
+
+
+def load_data_config(config_path: Path = DATA_CONFIG, root: Path = PROJECT_ROOT) -> dict:
+    """Foundation/raw loader remains strict for backward compatibility."""
+    data = load_detection_config(config_path, root)
+    if Path(data['path']) != root.resolve():
+        raise ValueError('Dataset root must remain the project root')
     return data
 
 

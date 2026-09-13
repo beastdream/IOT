@@ -1,6 +1,6 @@
 # SMART HELMET DETECTION SYSTEM
 
-Current Phase: **IMAGE PHASE — MANUAL REVIEW + CLEANING DECISION PREPARATION (3A)**.
+Current Phase: **IMAGE PHASE — APPLY CLEANING + CURATED DATASET V1 (3B)**.
 
 Task: helmet status detection from head regions. Current classes are exactly
 `0 = With Helmet` and `1 = Without Helmet`. See [dataset contract](docs/dataset_contract.md).
@@ -11,8 +11,8 @@ Image dataset → Dataset Audit → Dataset Cleaning → Dataset Analysis → Ba
 Training → Experiments → Evaluation → Failure Analysis → Image Inference → Local Database.
 
 Foundation, the read-only Dataset Audit pipeline and cleaning review preparation
-are implemented. Applying cleaning must be started separately after human review. Video is not implemented.
-There is no training, database, cloud integration or automatic cleaning.
+are implemented, along with explicit P0-only curated builds after human review.
+Video, model training, database and cloud integration are not implemented.
 
 | Split | Images |
 | --- | ---: |
@@ -161,8 +161,8 @@ Current CSV-linked images are authoritative; old report images are not deleted.
 
 `proposed_actions.csv` is suggestions only: approval is required, approved=false,
 applied=false. A completed P0 review is a gate for planning the next phase, not
-permission to execute exclusions. No cleaning/apply function, curated dataset,
-resplitting, rebalance, model training or predictions are implemented here.
+permission to execute exclusions automatically. Phase 3B below provides a separate
+explicit build command. Preparation itself never applies decisions.
 
 ## Interactive P0 review
 
@@ -200,3 +200,60 @@ reviewing. A file-lock/replace failure leaves the original in place.
 
 The HTML generator now writes indented multiline markup and CSS. Regenerating
 the report preserves existing decisions; the report remains a read-only viewer.
+
+## Curated dataset v1 (Phase 3B)
+
+```powershell
+.venv\Scripts\python.exe scripts/validate_review_decisions.py
+.venv\Scripts\python.exe scripts/apply_dataset_cleaning.py --dry-run
+# Continue only when the dry-run reports PASS:
+.venv\Scripts\python.exe scripts/apply_dataset_cleaning.py --apply
+.venv\Scripts\python.exe scripts/audit_dataset.py --config configs/data.curated.v1.yaml --output results/dataset_audit/curated_v1
+.venv\Scripts\python.exe scripts/check_training_readiness.py
+.venv\Scripts\python.exe scripts/verify_foundation.py
+```
+
+The builder reads final human P0 decisions, never suggestions. Every image has
+one final KEEP/EXCLUDE action. Conflicting KEEP and EXCLUDE votes abort the entire
+build before copying; PENDING/REVIEW_MORE P0 also abort. Dry-run performs read-only
+validation and prints unique exclusions, per-split counts and class counts.
+KEEP_A/KEEP_B follows the recorded A/B order even when it differs from the original
+evaluation-preference suggestion. Nothing is inferred from model performance.
+
+Retained images and labels are copied with `shutil.copy2` to `data/curated/v1/`,
+preserving original filenames and splits. No hardlinks, symlinks, resizing or
+annotation edits are used. P1/P2/P3 create no additional exclusions: their data
+is retained except where the same image is explicitly excluded by P0. Class IDs
+and names remain unchanged. Raw folders and export documents remain immutable.
+
+Copies are built in an owned staging directory and hash-checked before publishing
+v1. A label-copy failure aborts, cleans staging and never reports a successful
+partial build. Existing v1 is never silently merged; use `--apply --rebuild`
+explicitly to replace only that v1 tree. Paths and reparse points are checked before
+recursive removal. No raw directory is a rebuild target.
+
+`configs/data.curated.v1.yaml` uses `path: data/curated/v1` and split-local image
+paths. Run native YOLO commands from the project root. Python code uses
+`load_detection_config(config, PROJECT_ROOT)` to resolve paths independently of
+cwd; the original `load_data_config` remains strict for raw foundation checks.
+The audit's default command still audits raw; `--config` and `--output` select the
+curated version without changing the original audit outputs.
+
+Build evidence lives in `results/dataset_cleaning/curated_v1_*`: a record for every
+raw image, exclusions linked to human P0 reviews, summary, and hashes of every
+curated image, label and config. Multiple contributing review IDs are pipe-separated
+in manifests. The Phase 3A proposed-actions file stays historical suggestions;
+the curated manifests are the authoritative record of what was actually applied.
+
+Curated audit adds `cross_split_review.csv`, distinguishing the exact retained
+REVIEWED_KEEP_BOTH_CANDIDATE from UNREVIEWED_CROSS_SPLIT_CANDIDATE. Review evidence
+is tied to unchanged build input hashes and file provenance. Confirmed excluded
+pairs cannot remain together in the built image set. An unreviewed cross-split
+candidate blocks readiness; an exact pair explicitly reviewed KEEP_BOTH does not.
+
+Readiness checks current decisions/action-map, raw immutability, curated config,
+independent copied files, fingerprint, build provenance and a matching completed
+audit. General audit status may remain REVIEW_REQUIRED for P1/P2/P3 observations;
+these are warnings, not automatic baseline blockers. Changed decisions or stale
+fingerprints/audit require rebuilding/re-auditing before readiness can pass.
+Even READY FOR BASELINE TRAINING = YES does not start training.
