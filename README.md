@@ -1,6 +1,6 @@
 # SMART HELMET DETECTION SYSTEM
 
-Current Phase: **IMAGE PHASE — PROJECT FOUNDATION**.
+Current Phase: **IMAGE PHASE — DATASET AUDIT**.
 
 Task: helmet status detection from head regions. Current classes are exactly
 `0 = With Helmet` and `1 = Without Helmet`. See [dataset contract](docs/dataset_contract.md).
@@ -10,9 +10,9 @@ Task: helmet status detection from head regions. Current classes are exactly
 Image dataset → Dataset Audit → Dataset Cleaning → Dataset Analysis → Baseline
 Training → Experiments → Evaluation → Failure Analysis → Image Inference → Local Database.
 
-Only foundation is implemented. Dataset Audit is the next phase and must be
-started separately. Video is not implemented. There is no training, database,
-cloud integration or automatic dataset cleaning in this phase.
+Foundation and the read-only Dataset Audit pipeline are implemented. Dataset
+Cleaning must be started separately after manual review. Video is not implemented.
+There is no training, database, cloud integration or automatic cleaning.
 
 | Split | Images |
 | --- | ---: |
@@ -43,8 +43,9 @@ python -m pytest -q
 `pip install -e .` installs the src-layout package; `pip install -e ".[test]"`
 also installs tests. `requirements.txt` delegates to that test extra, so there
 is one dependency declaration in `pyproject.toml`. Foundation runtime only
-needs PyYAML; pytest is a test dependency. Ultralytics, torch, Pillow and numpy
-were considered but are not used by this phase's code, so they are not added.
+needs PyYAML; audit additionally uses Pillow and numpy for decoding, overlays and
+perceptual hashing. Pytest is a test dependency. Ultralytics and torch are not
+used by the audit and remain outside the declared dependencies.
 Observed existing versions were Ultralytics 8.4.128, torch 2.13.0, Pillow 12.2.0,
 numpy 2.4.6, PyYAML 6.0.3 and pytest 9.1.1. This is an environment observation,
 not a validated training stack or lockfile.
@@ -109,3 +110,11 @@ train/, valid/, test/    Original dataset, unchanged
 `.gitignore` excludes Python caches, environments, model weights and runtime
 results while retaining result-folder placeholders. It does not ignore source,
 config, tests, documentation or the dataset. Ignore rules do not remove files.
+
+## Dataset Audit
+
+Run `.venv\Scripts\python.exe scripts/audit_dataset.py` from the project root.
+See [audit methodology and report guide](docs/dataset_audit.md) for thresholds,
+output schemas and manual review instructions. Results are generated under
+`results/dataset_audit/`; `REVIEW_REQUIRED` is a valid completed audit outcome.
+The audit does not start cleaning or training.
