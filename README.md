@@ -137,8 +137,9 @@ audit's manual-evidence list. P0 pairs and P1 boxes remain separate decisions ev
 when the same image occurs in several cases; other image reasons are merged into
 the evidence field.
 
-Record human decisions in `results/dataset_cleaning/review_decisions.csv` using
-only the allowed values listed in `results/dataset_cleaning/cleaning_policy.md`.
+Use the interactive P0 tool below to record human decisions safely in
+`results/dataset_cleaning/review_decisions.csv`. Allowed values are documented in
+`results/dataset_cleaning/cleaning_policy.md`.
 The report is read-only. All template decisions start PENDING. The validator
 accepts a valid pending file (exit 0), but reports READY TO APPLY CLEANING = NO
 while P0 is PENDING or REVIEW_MORE. REVIEW_MORE is unresolved, not completed.
@@ -162,3 +163,40 @@ Current CSV-linked images are authoritative; old report images are not deleted.
 applied=false. A completed P0 review is a gate for planning the next phase, not
 permission to execute exclusions. No cleaning/apply function, curated dataset,
 resplitting, rebalance, model training or predictions are implemented here.
+
+## Interactive P0 review
+
+```powershell
+.venv\Scripts\python.exe scripts/review_cleaning_cases.py --priority P0 --pending-only --open-image
+.venv\Scripts\python.exe scripts/open_cleaning_review.py
+```
+
+The default priority is P0. `--open-image` opens each comparison in the default
+image application; omit it to review using the printed path or HTML. The report
+opener uses Python's webbrowser module and the default browser. No browser path
+or additional dependency is required.
+
+Choices: **1** KEEP_BOTH, **2** KEEP_A_EXCLUDE_B, **3** KEEP_B_EXCLUDE_A,
+**4** REVIEW_MORE, **S** skip, **Q** quit. A/B refer to the displayed queue fields,
+not a fixed train/evaluation ordering. The tool shows both splits, filenames,
+hash distance, source groups, object/class counts and current decision/notes.
+An empty notes response keeps the previous notes; entered text replaces notes.
+Each saved decision persists immediately. Skipping, quitting or interrupting an
+unsaved choice does not change that case. P1/P2/P3 decisions are never updated.
+
+`--pending-only` resumes remaining PENDING cases. REVIEW_MORE is unresolved for
+readiness but excluded from this filter; omit `--pending-only` to revisit it.
+Progress reports completed, pending and REVIEW_MORE separately. The tool never
+applies cleaning or marks proposed actions approved.
+
+Before the first save in a session, an exact timestamped backup is created under
+`results/dataset_cleaning/backups/`. No backup is needed for a skip/quit-only
+session. Saves validate the full candidate CSV, write and validate a temporary
+file in the same directory, then use atomic replacement and validate again.
+Row order, other decisions and unchanged notes are preserved. Existing invalid
+CSV, changed queue or detected external edits cause an error instead of silently
+overwriting them. Avoid editing the decision CSV in another application while
+reviewing. A file-lock/replace failure leaves the original in place.
+
+The HTML generator now writes indented multiline markup and CSS. Regenerating
+the report preserves existing decisions; the report remains a read-only viewer.

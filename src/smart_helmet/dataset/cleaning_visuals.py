@@ -80,31 +80,77 @@ def generate_comparison(row, records, by_image, root, output):
 def render_html(queue, summary):
     counts = {p: sum(r['priority'] == p for r in queue) for p in FOLDERS}
     labels = {'P0':'CROSS-SPLIT', 'P1':'TINY BBOX', 'P2':'RESOLUTION', 'P3':'SOURCE VARIANT SAMPLE'}
-    cards = ''.join(f'<a class="card" href="#{p}"><strong>{counts[p]}</strong>{p} {labels[p]}</a>' for p in FOLDERS)
+    cards = '\n'.join(f'        <a class="card" href="#{p}"><strong>{counts[p]}</strong>{p} {labels[p]}</a>' for p in FOLDERS)
     sections = []
     for priority in FOLDERS:
         cases = []
         for row in queue:
             if row['priority'] != priority:
                 continue
-            members = '<br>'.join(escape(name) for name in row['members'])
+            members = '<br>\n            '.join(escape(name) for name in row['members'])
             src = '../' + row['visualization_path']
-            cases.append(f'<article id="{escape(row["review_id"])}"><h3>{escape(row["review_id"])}</h3>'
-                         f'<p class="files">{members}</p><p><b>Suggestion only:</b> {escape(row["suggested_action"])}. '
-                         f'{escape(row["reason"])}</p><p>{escape(row["evidence"])}</p>'
-                         f'<a href="{escape(src, quote=True)}"><img loading="lazy" src="{escape(src, quote=True)}" '
-                         f'alt="{escape(row["review_id"])} ground-truth review"></a></article>')
-        sections.append(f'<section id="{priority}"><h2>{priority} {labels[priority]}</h2>{"".join(cases)}</section>')
-    return ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' \
-        '<title>DATASET CLEANING REVIEW</title><style>' \
-        'body{font:16px/1.5 system-ui,sans-serif;background:#edf1f5;color:#172536;margin:0}main{max-width:1250px;margin:auto;padding:24px}' \
-        'h1,h2{line-height:1.2}.cards{display:flex;flex-wrap:wrap;gap:12px}.card,article{background:white;border:1px solid #ccd5df;border-radius:8px;padding:18px}' \
-        '.card{flex:1;min-width:180px;color:inherit;text-decoration:none}.card strong{display:block;font-size:32px}article{margin:18px 0}' \
-        'img{max-width:100%;height:auto;display:block}.files{overflow-wrap:anywhere;font:13px monospace}.notice{border-left:5px solid #c67c00;padding:12px;background:#fff4da}' \
-        'section{scroll-margin-top:12px}a{color:#155ca5}</style></head><body><main><h1>DATASET CLEANING REVIEW</h1>' \
-        '<p class="notice">Review preparation only. No dataset changes have been applied. P0 is blocking. '
-        'pHash similarity is not proof of identical pixels. Click any comparison to inspect the full image.</p>' \
-        '<p><a href="../review_decisions.csv">Decision CSV</a> | <a href="../review_queue.csv">Review queue</a> | '
-        '<a href="../cleaning_policy.md">Cleaning policy</a></p><p>Edit decisions in the CSV, then run the validator. '
-        'This static report does not edit or apply decisions. P3 is informational for same-split groups.</p>' \
-        f'<div class="cards">{cards}</div>{"".join(sections)}</main></body></html>')
+            cases.append(
+                f'        <article id="{escape(row["review_id"])}">\n'
+                f'          <h3>{escape(row["review_id"])}</h3>\n'
+                f'          <p class="files">\n            {members}\n          </p>\n'
+                f'          <p><b>Suggestion only:</b> {escape(row["suggested_action"])}.\n'
+                f'            {escape(row["reason"])}</p>\n'
+                f'          <p>{escape(row["evidence"])}</p>\n'
+                f'          <a href="{escape(src, quote=True)}">\n'
+                f'            <img loading="lazy" src="{escape(src, quote=True)}"\n'
+                f'                 alt="{escape(row["review_id"])} ground-truth review">\n'
+                f'          </a>\n'
+                f'        </article>'
+            )
+        sections.append(
+            f'      <section id="{priority}">\n'
+            f'        <h2>{priority} {labels[priority]}</h2>\n'
+            + '\n'.join(cases) + '\n      </section>'
+        )
+    body_sections = '\n'.join(sections)
+    return f'''<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>DATASET CLEANING REVIEW</title>
+    <style>
+      body {{ font: 16px/1.5 system-ui,sans-serif; background: #edf1f5; color: #172536; margin: 0; }}
+      main {{ max-width: 1250px; margin: auto; padding: 24px; }}
+      h1, h2 {{ line-height: 1.2; }}
+      .cards {{ display: flex; flex-wrap: wrap; gap: 12px; }}
+      .card, article {{ background: white; border: 1px solid #ccd5df; border-radius: 8px; padding: 18px; }}
+      .card {{ flex: 1; min-width: 180px; color: inherit; text-decoration: none; }}
+      .card strong {{ display: block; font-size: 32px; }}
+      article {{ margin: 18px 0; }}
+      img {{ max-width: 100%; height: auto; display: block; }}
+      .files {{ overflow-wrap: anywhere; font: 13px monospace; }}
+      .notice {{ border-left: 5px solid #c67c00; padding: 12px; background: #fff4da; }}
+      section {{ scroll-margin-top: 12px; }}
+      a {{ color: #155ca5; }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>DATASET CLEANING REVIEW</h1>
+      <p class="notice">
+        Review preparation only. No dataset changes have been applied. P0 is blocking.
+        pHash similarity is not proof of identical pixels. Click any comparison to inspect the full image.
+      </p>
+      <p>
+        <a href="../review_decisions.csv">Decision CSV</a> |
+        <a href="../review_queue.csv">Review queue</a> |
+        <a href="../cleaning_policy.md">Cleaning policy</a>
+      </p>
+      <p>
+        Use scripts/review_cleaning_cases.py for interactive P0 decisions, then run the validator.
+        This static report does not edit or apply decisions. P3 is informational for same-split groups.
+      </p>
+      <div class="cards">
+{cards}
+      </div>
+{body_sections}
+    </main>
+  </body>
+</html>
+'''
