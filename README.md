@@ -1,6 +1,6 @@
 # SMART HELMET DETECTION SYSTEM
 
-Current Phase: **IMAGE PHASE — DATASET AUDIT**.
+Current Phase: **IMAGE PHASE — MANUAL REVIEW + CLEANING DECISION PREPARATION (3A)**.
 
 Task: helmet status detection from head regions. Current classes are exactly
 `0 = With Helmet` and `1 = Without Helmet`. See [dataset contract](docs/dataset_contract.md).
@@ -10,8 +10,8 @@ Task: helmet status detection from head regions. Current classes are exactly
 Image dataset → Dataset Audit → Dataset Cleaning → Dataset Analysis → Baseline
 Training → Experiments → Evaluation → Failure Analysis → Image Inference → Local Database.
 
-Foundation and the read-only Dataset Audit pipeline are implemented. Dataset
-Cleaning must be started separately after manual review. Video is not implemented.
+Foundation, the read-only Dataset Audit pipeline and cleaning review preparation
+are implemented. Applying cleaning must be started separately after human review. Video is not implemented.
 There is no training, database, cloud integration or automatic cleaning.
 
 | Split | Images |
@@ -118,3 +118,47 @@ See [audit methodology and report guide](docs/dataset_audit.md) for thresholds,
 output schemas and manual review instructions. Results are generated under
 `results/dataset_audit/`; `REVIEW_REQUIRED` is a valid completed audit outcome.
 The audit does not start cleaning or training.
+
+## Cleaning review preparation (Phase 3A)
+
+```powershell
+.venv\Scripts\python.exe -m compileall src scripts tests
+.venv\Scripts\python.exe scripts/prepare_cleaning_review.py
+.venv\Scripts\python.exe scripts/validate_review_decisions.py
+.venv\Scripts\python.exe -m pytest -q
+.venv\Scripts\python.exe scripts/verify_foundation.py
+```
+
+Open [the static review report](results/dataset_cleaning/review_report/index.html)
+in a browser after preparation. It contains all cross-split comparisons (P0),
+tiny-box cases with context zooms (P1), unusual resolutions (P2), and a fixed-seed
+sample of up to 40 source groups (P3). It does not require reviewing the complete
+audit's manual-evidence list. P0 pairs and P1 boxes remain separate decisions even
+when the same image occurs in several cases; other image reasons are merged into
+the evidence field.
+
+Record human decisions in `results/dataset_cleaning/review_decisions.csv` using
+only the allowed values listed in `results/dataset_cleaning/cleaning_policy.md`.
+The report is read-only. All template decisions start PENDING. The validator
+accepts a valid pending file (exit 0), but reports READY TO APPLY CLEANING = NO
+while P0 is PENDING or REVIEW_MORE. REVIEW_MORE is unresolved, not completed.
+Other priorities may remain pending and are reported separately.
+
+Preparation verifies the full raw dataset against the audit fingerprint before
+and after generating artifacts. It uses audit CSVs rather than rerunning the
+audit or applying changes. Outputs are under `results/dataset_cleaning/`:
+review queue, source-group summary, conditional proposed actions, decisions,
+review summary, policy, annotated comparisons and HTML. No additional dependency
+is introduced. Dataset and original export files remain untouched.
+
+Rerunning preparation generates stable review IDs from image and annotation
+identity, deduplicates review units, and preserves existing decision values and
+notes. Existing IDs that no longer match the queue, duplicate IDs or invalid
+decisions cause an error without overwriting human input. Decisions entered while
+preparation is running are also preserved, and the command asks for a rerun.
+Current CSV-linked images are authoritative; old report images are not deleted.
+
+`proposed_actions.csv` is suggestions only: approval is required, approved=false,
+applied=false. A completed P0 review is a gate for planning the next phase, not
+permission to execute exclusions. No cleaning/apply function, curated dataset,
+resplitting, rebalance, model training or predictions are implemented here.
