@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 2
+names: ['With Helmet', 'Without Helmet']
+
+roboflow:
+  workspace: minh-dinh-ncq4u
+  project: bike-helmet-detection-2vdjo-nkdyo-45n6a
+  version: 1
+  license: Public Domain
+  url: https://universe.roboflow.com/minh-dinh-ncq4u/bike-helmet-detection-2vdjo-nkdyo-45n6a/dataset/1

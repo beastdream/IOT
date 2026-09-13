@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+runs/
+*.pt
+*.onnx
+*.engine
+*.cache
+/results/*/*
+!/results/*/.gitkeep

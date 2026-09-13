@@ -1,0 +1,10 @@
+# Run native Ultralytics commands from the project root.
+# Python callers outside that directory should use load_data_config().
+path: .
+train: train/images
+val: valid/images
+test: test/images
+nc: 2
+names:
+  0: With Helmet
+  1: Without Helmet
