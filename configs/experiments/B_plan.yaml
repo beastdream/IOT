@@ -1,0 +1,105 @@
+plan_only: true
+training_authorized: false
+baseline_reference: A_baseline
+primary_problem: Without Helmet under-detection with low-confidence and class-confusion
+  evidence; semantic causes unresolved
+primary_metric: Without Helmet Recall
+baseline_recall: 0.5304347826086957
+proposed_change:
+  factor_group: TRAIN image sampling
+  strategy: Balance probability mass of images containing Without Helmet and images
+    without it
+  positive_image_weight: 1.5733333333333333
+  other_image_weight: 1.0
+  epoch_draws: 1158
+  replacement: true
+  seed: 42
+  dataset_edits: false
+constants_from_baseline:
+  model: D:\IOT\results\model_cache\yolo11n.pt
+  imgsz: 416
+  batch: 4
+  workers: 0
+  seed: 42
+  epochs: 100
+  patience: 20
+additional_constants: Preserve exact baseline args, optimizer resolution, pretrained
+  initialization, augmentations, split, epoch length, evaluator and thresholds; only
+  sampler changes.
+experiment_rationale: '30/50 misses have one-to-one low-confidence same-class candidates;
+  18/50 have wrong-class matches. TRAIN objects: With Helmet 2009, Without Helmet
+  1038. Image-presence weight 1.5733333333333333 balances the two strata; this tests
+  exposure, not a proven cause.'
+expected_observation: Fewer Without Helmet misses at the unchanged operating point,
+  improved framework recall and mAP50; improvement is not guaranteed.
+success_criteria:
+- Compare framework Without Helmet recall against 0.5304 using identical evaluation
+  settings; also report fixed-confidence 0.25 metrics separately.
+- Require recall improvement with a positive lower bound of a paired 95% image-bootstrap
+  difference interval; resample whole images to preserve object dependence. This conventional
+  uncertainty criterion avoids a fabricated effect-size cutoff.
+- 'Conservative precision safeguard: Without Helmet precision must not fall below
+  baseline 0.7344789657; overall mAP50 must not fall below 0.7547054629. Report paired
+  uncertainty; inconclusive evidence is not a PASS.'
+- Report Without Helmet mAP50, overall recall, FP/FN counts, per-size and per-scene
+  results; do not select a threshold to manufacture training gains.
+- Treat one-seed results as provisional; training-run variability remains unmeasured.
+  TEST stays locked through model selection.
+higher_resolution_justified: false
+test_status: LOCKED / NOT USED
+ready_to_train: false
+prerequisites:
+- Human review of all pending cases; flag suspicious annotations without editing VALID.
+- Implement and verify sampler, positive/negative exposure and unchanged epoch length
+  in a future authorized training phase.
+- Verify future training preserves the recorded AdamW parameter groups and all baseline
+  settings except sampling.
+recommendation: B. Class-aware TRAIN image sampling
+resolved_optimizer_from_baseline:
+  optimizer_class: AdamW
+  optimizer_initial_parameter_groups:
+  - lr: 0.001667
+    betas:
+    - 0.9
+    - 0.999
+    weight_decay: 0.0005
+    param_group: weight
+    eps: 1.0e-08
+    amsgrad: false
+    maximize: false
+    foreach: null
+    capturable: false
+    differentiable: false
+    fused: null
+    decoupled_weight_decay: true
+    initial_lr: 0.001667
+  - lr: 0.001667
+    betas:
+    - 0.9
+    - 0.999
+    weight_decay: 0.0
+    param_group: bn
+    eps: 1.0e-08
+    amsgrad: false
+    maximize: false
+    foreach: null
+    capturable: false
+    differentiable: false
+    fused: null
+    decoupled_weight_decay: true
+    initial_lr: 0.001667
+  - lr: 0.001667
+    betas:
+    - 0.9
+    - 0.999
+    weight_decay: 0.0
+    param_group: bias
+    eps: 1.0e-08
+    amsgrad: false
+    maximize: false
+    foreach: null
+    capturable: false
+    differentiable: false
+    fused: null
+    decoupled_weight_decay: true
+    initial_lr: 0.001667

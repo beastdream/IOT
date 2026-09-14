@@ -388,3 +388,56 @@ disables the installed framework's first-epoch automatic OOM retries so a batch
 change requires an explicit new invocation. Framework image-repair writes into raw
 or curated image directories are refused. External analytics and experiment logger
 callbacks are disabled for these local runs.
+
+## Phase 4B Baseline Validation Evaluation
+
+Run the following from the project root after A_baseline finishes:
+
+```powershell
+.venv\Scripts\python.exe scripts/evaluate_baseline.py
+.venv\Scripts\python.exe scripts/analyze_baseline_failures.py
+```
+
+Both commands use only `results/experiments/A_baseline/weights/best.pt` and curated
+VALID. `--split test` and every split other than `val` are rejected before model
+loading. There is no checkpoint override or fallback to last.pt, smoke weights, or
+pretrained weights. TEST remains locked; neither command trains a model.
+
+Outputs are under `results/evaluation/A_baseline_val/`: overall/per-class JSON and
+CSV metrics, original Ultralytics curves/confusion matrices, training-curve summary,
+all VALID predictions, failure CSV, annotated copies, 20 selected samples, a dedicated
+Without Helmet analysis, and `baseline_evaluation_report.md`. Box-prefixed framework
+curves are preserved with byte-identical PR/F1/P/R aliases. The training artifact
+directory is fingerprinted before/after and never used for evaluation output.
+
+The independent evaluation uses conf=0.001, NMS IoU=0.7, imgsz=416, batch=4,
+workers=0 and the available device (`--device cpu` is supported). Evaluation and
+inference use FP32 on CPU/CUDA; reduced precision on GTX 1650 can yield zero-mAP
+or NaN results according to the installed framework. Framework P/R use its selected operating point; AP integrates
+confidence rankings. Differences >0.03 absolute from final training metrics generate
+warnings. No metric is fabricated or substituted from a different checkpoint.
+
+Failure diagnostics use a fixed confidence threshold of 0.25 and class-aware,
+confidence-ordered, one-to-one matching at IoU >=0.5. Unmatched wrong-class overlaps
+are tagged CLASS_CONFUSION and remain both a GT-class FN and a predicted-class FP.
+Tiny means normalized bbox area <0.001, reusing the audit definition; tiny failures
+refer to missed GT. Multiple-object scenes are context, not proof of an error/cause.
+Low-confidence cases include matched predictions in [0.25,0.5), and same-class
+one-to-one candidates below 0.25 for missed GT. Confidence distributions cover
+post-NMS predictions >=0.001 with max_det=300 per image, not unlimited raw proposals.
+These diagnostics do not change any production threshold and should not be equated
+with the framework's confusion-matrix cells or selected-operating-point P/R.
+
+Copies show green GT on the left and orange predictions on the right, with class
+names and confidence legends; relevant predictions below 0.25 are yellow. Galleries
+can overlap. In particular, Without Helmet misses may also be tiny, low-confidence,
+or in multi-object scenes. Occlusion is not inferred automatically; uncertain causes
+require human review. Recommended experiments are proposals based on VALID evidence,
+not guarantees, and are not executed by these scripts.
+
+Dataset fingerprints are verified before/after, including failure paths. Existing
+label-cache redirection and frozen-image write protection are reused. Evaluation
+YAML omits TEST. TRAIN appears only to satisfy the framework dataset schema; inference
+and metric evaluation select VALID exclusively. To rerun intentionally, use
+`--overwrite`: evaluation archives the entire old evaluation directory; failure
+analysis archives its own generated outputs while preserving metric artifacts.
