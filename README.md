@@ -1,6 +1,6 @@
 # SMART HELMET DETECTION SYSTEM
 
-Current Phase: **IMAGE PHASE — APPLY CLEANING + CURATED DATASET V1 (3B)**.
+Current Phase: **IMAGE PHASE — PRE-TRAINING CURATION SANITY CHECK (3C)**.
 
 Task: helmet status detection from head regions. Current classes are exactly
 `0 = With Helmet` and `1 = Without Helmet`. See [dataset contract](docs/dataset_contract.md).
@@ -257,3 +257,134 @@ audit. General audit status may remain REVIEW_REQUIRED for P1/P2/P3 observations
 these are warnings, not automatic baseline blockers. Changed decisions or stale
 fingerprints/audit require rebuilding/re-auditing before readiness can pass.
 Even READY FOR BASELINE TRAINING = YES does not start training.
+
+## Pre-training split-priority sanity check (Phase 3C)
+
+```powershell
+.venv\Scripts\python.exe scripts/check_curation_policy.py
+```
+
+This read-only check traces every built exclusion to its P0 review and retained
+partner. Split priority is TEST=3, VALID=2, TRAIN=1. A numerically valid final
+decision can still reverse this policy. No human choice is changed, and no
+dataset is rebuilt by the checker. Training readiness now includes this policy
+gate and reports NO while mismatches or unresolved evidence remain.
+
+Outputs under `results/dataset_cleaning/`:
+
+- `pretraining_curation_sanity.csv`: one evidence row per contributing P0 pair.
+- `test_exclusion_review.csv`: all contributing reviews for excluded test images.
+- `pretraining_curation_summary.json`: distinct-image counts and status.
+- `pretraining_review/`: annotated A/B comparisons with retained/excluded markers.
+- `pretraining_curation_report.html`: formatted browser report covering test,
+  problematic and all exclusions.
+
+Multiple pair rows can reference one excluded image. Summary counts use unique
+excluded images. `direction_status=POLICY_MISMATCH` means the higher-priority
+split was excluded. With empty notes, `policy_status=NEEDS_REVIEW`: intent to
+make an exception has not been established. Thus the direction-mismatch count
+and needs-review count can overlap. Notes are displayed verbatim; the checker
+does not infer approval of a policy exception from arbitrary text. Any documented
+exception needs explicit human assessment rather than being silently accepted.
+
+Revisit a completed P0 case safely, using an ID from the report:
+
+```powershell
+.venv\Scripts\python.exe scripts/review_cleaning_cases.py --review-id <ID> --open-image
+```
+
+`--review-id` overrides `--pending-only` for that case. It shows the existing
+decision, keeps old notes when Enter is pressed, and uses the existing per-session
+backup, atomic write and validator. No decision is entered automatically. For an
+image participating in several pairs, review all related IDs; inconsistent
+decisions will be rejected by the cleaning dry-run.
+
+After human correction, these are **manual follow-up commands**, not commands
+run automatically in Phase 3C:
+
+```powershell
+.venv\Scripts\python.exe scripts/validate_review_decisions.py
+.venv\Scripts\python.exe scripts/apply_dataset_cleaning.py --dry-run
+# Only after PASS and an explicit decision to rebuild:
+.venv\Scripts\python.exe scripts/apply_dataset_cleaning.py --apply --rebuild
+.venv\Scripts\python.exe scripts/audit_dataset.py --config configs/data.curated.v1.yaml --output results/dataset_audit/curated_v1
+.venv\Scripts\python.exe scripts/check_curation_policy.py
+.venv\Scripts\python.exe scripts/check_training_readiness.py
+```
+
+Changing a decision does not alter the already-built curated version; manifests
+and readiness continue to detect the difference until a deliberate rebuild and
+re-audit. No training is performed in this phase.
+
+## Phase 4A Baseline Training
+
+The baseline uses the installed Ultralytics detection framework and the official
+YOLO11 nano checkpoint, `yolo11n.pt` (architecture verified against the installed
+package; [official model documentation](https://docs.ultralytics.com/models/yolo11/)).
+Install training dependencies if missing with `python -m pip install -e ".[training]"`.
+The actual Python, PyTorch and Ultralytics versions are recorded for each experiment.
+The verified initial environment uses Ultralytics 8.4.128 and PyTorch 2.13.0+cpu.
+
+Run from the project root:
+
+```powershell
+.venv\Scripts\python.exe scripts/check_training_environment.py
+.venv\Scripts\python.exe scripts/train_baseline.py --dry-run
+.venv\Scripts\python.exe scripts/train_baseline.py --smoke-test
+# Run manually only after the smoke test succeeds:
+.venv\Scripts\python.exe scripts/train_baseline.py
+```
+
+`configs/baseline.yaml` configures the baseline: 416px, 100 epochs, patience 20,
+seed 42, deterministic mode, pretrained weights, and two requested workers.
+416px matches the predominant source resolution and keeps this baseline efficient.
+A 640px tiny-object experiment is deferred. No custom augmentation is introduced.
+**Baseline uses Ultralytics framework-default training augmentation for the installed version.**
+The resolved framework arguments, including augmentation defaults, are saved in
+`framework_resolved_args.yaml`, `args.yaml`, and experiment metadata.
+
+`device: auto` selects the current CUDA GPU when available and falls back to CPU.
+`batch: auto` uses supported single-GPU auto-batch; CPU uses a reported conservative
+batch of 2. Override explicitly with `--device`, `--batch`, `--workers`, or `--epochs`.
+For example, `--smoke-test --batch 2 --workers 0` avoids DataLoader multiprocessing.
+Ultralytics may itself resolve CPU workers to zero; both requested and resolved
+values are recorded. CUDA OOM is reported without silent retries; reduce batch
+explicitly. Exact numerical reproducibility across devices/framework versions is
+not guaranteed despite fixed seed and deterministic mode.
+
+Smoke training uses two epochs, a 2% runtime TRAIN fraction when supported, and
+full VALID validation. It does not create a new split or alter source files.
+`--epochs` with `--smoke-test` is limited to two. Smoke metrics only establish that
+loading, forward/backward, validation and checkpoint saving work.
+
+Full output: `results/experiments/A_baseline/`.
+Smoke output: `results/experiments/A_baseline_smoke/`.
+Weights are in `weights/best.pt` and `weights/last.pt`. The full run fails if best.pt
+is missing; last.pt is never relabeled as best.pt. Full training requires successful
+smoke metadata matching the dataset fingerprint, model, image size and framework.
+Existing outputs are protected: `--overwrite` explicitly archives the previous
+experiment into a timestamped sibling before starting a clean output directory.
+Alternatively set a new `experiment_name` in a config selected by `--config`.
+Official downloaded weights are stored in `results/model_cache/`.
+
+Curated v1 is frozen: no edits, moves, relabeling, resplitting, rebalancing, or on-disk
+resizing. Readiness and the existing raw/curated fingerprints are verified before
+training and again after training, including failure paths. Fingerprints and hashes
+are stored in each experiment. Image caching is disabled; label-cache writes are
+redirected into that experiment's `dataset_cache/`, including during final validation.
+
+**TEST is locked until Final Evaluation.** The framework receives an experiment-local
+YAML containing only the original TRAIN and VALID paths. TEST is omitted, and the
+validation split is explicitly `val`. Do not use TEST to choose epochs, confidence,
+augmentations, model sizes or hyperparameters. Validation metrics are not final TEST
+metrics. This phase performs no standalone evaluation, video processing, failure
+analysis, database or cloud work. Full training is a manual command, not part of
+pipeline verification.
+
+Experiment metadata also records the optimizer class and its initial parameter-group
+settings after framework auto-selection, plus the actual two-class model parameter
+count. Input defaults such as `optimizer: auto` are retained separately. The wrapper
+disables the installed framework's first-epoch automatic OOM retries so a batch
+change requires an explicit new invocation. Framework image-repair writes into raw
+or curated image directories are refused. External analytics and experiment logger
+callbacks are disabled for these local runs.

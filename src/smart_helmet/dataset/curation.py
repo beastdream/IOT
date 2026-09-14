@@ -288,6 +288,9 @@ def training_readiness(root=PROJECT_ROOT):
         for filename in ('image_issues.csv','annotation_issues.csv','exact_duplicates.csv','source_groups.csv','image_resolutions.csv','bbox_statistics.csv'):
             read_csv(audit_dir/filename)
         checks['Curated audit complete']=True
+        from .curation_policy import analyze_policy
+        _,policy=analyze_policy(root)
+        checks['Curation split-priority policy']=policy['status']=='PASS'
     except (OSError,ValueError,KeyError) as error:
         errors.append(str(error))
     ready=not errors and bool(checks) and all(checks.values())

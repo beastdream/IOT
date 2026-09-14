@@ -1,0 +1,15 @@
+﻿experiment_name: A_baseline
+data: configs/data.curated.v1.yaml
+model: yolo11n.pt
+imgsz: 416
+epochs: 100
+patience: 20
+seed: 42
+deterministic: true
+device: auto
+workers: 2
+cache: false
+pretrained: true
+batch: auto
+smoke_epochs: 2
+smoke_fraction: 0.02

@@ -1,0 +1,7 @@
+﻿"""Windows-safe baseline training entrypoint."""
+from multiprocessing import freeze_support
+from smart_helmet.training.trainer import main
+
+if __name__ == '__main__':
+    freeze_support()
+    raise SystemExit(main())

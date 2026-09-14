@@ -11,6 +11,7 @@ dependencies = ["PyYAML>=6,<7", "Pillow>=10", "numpy>=1.24"]
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10"]
+training = ["ultralytics==8.4.128"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
