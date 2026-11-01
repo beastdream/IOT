@@ -122,13 +122,69 @@ def require_smoke(cfg, env, root):
     discover_checkpoints(smoke_path, smoke=True)
 
 
+<<<<<<< HEAD
 def train(cfg, env, snapshot, overwrite=False, root=PROJECT_ROOT, model_factory=None, cache_context=None):
     root = Path(root).resolve()
     smoke = cfg['experiment_type'] == 'smoke'
+=======
+def _load_resume_metadata(out, cfg, env, snapshot):
+    metadata_path = out/'experiment.json'
+    if not metadata_path.is_file():
+        raise ValueError(f'Cannot resume: missing experiment metadata at {metadata_path}')
+    metadata = json.loads(metadata_path.read_text(encoding='utf-8'))
+    expected = {
+        'experiment_name': out.name,
+        'experiment_type': 'baseline',
+        'training_status': metadata.get('training_status'),
+        'model_checkpoint': cfg['model'],
+        'ultralytics_version': env['ultralytics_version'],
+        'torch_version': env['torch_version'],
+        'python_version': env['python_version'],
+        'device': cfg['device'],
+        'dataset_version': 'curated_v1',
+        'dataset_fingerprint': snapshot['curated_hash'],
+        'imgsz': cfg['imgsz'],
+        'epochs_requested': cfg['epochs'],
+        'batch': cfg['batch'],
+        'seed': cfg['seed'],
+        'deterministic': cfg['deterministic'],
+        'test_status': 'LOCKED',
+        'train_fraction': 1.0,
+    }
+    for key, value in expected.items():
+        if key == 'training_status':
+            if value not in {'RUNNING', 'FAIL'}:
+                raise ValueError(f'Cannot resume experiment with status {value!r}.')
+        elif metadata.get(key) != value:
+            raise ValueError(f'Cannot resume: experiment metadata mismatch for {key}.')
+    expected_classes = {str(key): value for key, value in snapshot['data']['names'].items()}
+    if metadata.get('class_mapping') != expected_classes:
+        raise ValueError('Cannot resume: saved class mapping differs from the current dataset.')
+    fingerprint_path = out/'dataset_fingerprint.json'
+    if not fingerprint_path.is_file():
+        raise ValueError('Cannot resume: saved dataset fingerprint is missing.')
+    fingerprints = json.loads(fingerprint_path.read_text(encoding='utf-8'))
+    if fingerprints.get('curated_hash') != snapshot['curated_hash'] or fingerprints.get('raw_hash') != snapshot['raw_hash']:
+        raise ValueError('Cannot resume: saved dataset fingerprint differs from the current dataset.')
+    if not (out/'results.csv').is_file():
+        raise ValueError('Cannot resume: training results.csv is missing.')
+    last_checkpoint = out/'weights'/'last.pt'
+    if not last_checkpoint.is_file() or last_checkpoint.stat().st_size == 0:
+        raise ValueError(f'Cannot resume: missing/nonempty last.pt required at {last_checkpoint}.')
+    return metadata, last_checkpoint
+
+
+def train(cfg, env, snapshot, overwrite=False, root=PROJECT_ROOT, model_factory=None, cache_context=None, resume=False):
+    root = Path(root).resolve()
+    smoke = cfg['experiment_type'] == 'smoke'
+    if resume and smoke:
+        raise ValueError('Smoke-test runs cannot be resumed; use --smoke-test to create a fresh smoke run.')
+>>>>>>> 6aa8d52 (Initial commit)
     if not smoke: require_smoke(cfg,env,root)
     out = Path(cfg['output'])
     if out != output_path(root,cfg['experiment_name'],smoke):
         raise ValueError('Output differs from the owned experiment directory')
+<<<<<<< HEAD
     prepare_output(out,overwrite)
     start = time.monotonic()
     metadata = dict(experiment_name=out.name, experiment_type=cfg['experiment_type'],
@@ -141,6 +197,34 @@ def train(cfg, env, snapshot, overwrite=False, root=PROJECT_ROOT, model_factory=
         start_time=datetime.now(timezone.utc).isoformat(), end_time=None, duration_seconds=None,
         best_model_path=None,last_model_path=None,training_status='RUNNING',test_status='LOCKED',
         augmentation_policy=AUGMENTATION_POLICY, validation_scope='Full VALID split', train_fraction=cfg['fraction'])
+=======
+    if resume:
+        if overwrite:
+            raise ValueError('--resume and --overwrite cannot be used together.')
+        metadata, resume_checkpoint = _load_resume_metadata(out,cfg,env,snapshot)
+    else:
+        prepare_output(out,overwrite)
+    start = time.monotonic()
+    if not resume:
+        metadata = dict(experiment_name=out.name, experiment_type=cfg['experiment_type'],
+            model_checkpoint=cfg['model'], ultralytics_version=env['ultralytics_version'],
+            torch_version=env['torch_version'], python_version=env['python_version'], device=cfg['device'],
+            gpu_name=env['gpu_name'], dataset_config=cfg['data'], dataset_version='curated_v1',
+            dataset_fingerprint=snapshot['curated_hash'], class_mapping=snapshot['data']['names'],
+            imgsz=cfg['imgsz'], epochs_requested=cfg['epochs'], epochs_completed=0, batch=cfg['batch'],
+            workers=cfg['workers'], seed=cfg['seed'], deterministic=cfg['deterministic'], pretrained=cfg['pretrained'],
+            start_time=datetime.now(timezone.utc).isoformat(), end_time=None, duration_seconds=None,
+            best_model_path=None,last_model_path=None,training_status='RUNNING',test_status='LOCKED',
+            augmentation_policy=AUGMENTATION_POLICY, validation_scope='Full VALID split', train_fraction=cfg['fraction'])
+    else:
+        metadata['training_status'] = 'RUNNING'
+        metadata['end_time'] = None
+        metadata['resume_count'] = int(metadata.get('resume_count', 0)) + 1
+        metadata['resume_start_time'] = datetime.now(timezone.utc).isoformat()
+        metadata.pop('error', None)
+        metadata.pop('immutability_error', None)
+    metadata['epochs_completed'] = len(result_rows(out)) if resume else 0
+>>>>>>> 6aa8d52 (Initial commit)
     write_json(out/'environment.json',env)
     write_json(out/'dataset_fingerprint.json',dict(curated=snapshot['curated'],raw=snapshot['raw'],
                curated_hash=snapshot['curated_hash'],raw_hash=snapshot['raw_hash']))
@@ -158,12 +242,35 @@ def train(cfg, env, snapshot, overwrite=False, root=PROJECT_ROOT, model_factory=
         if model_factory is None:
             from ultralytics import YOLO
             model_factory = YOLO
+<<<<<<< HEAD
         weights = root/'results/model_cache'/cfg['model']
         weights.parent.mkdir(parents=True,exist_ok=True)
         print(f'Checkpoint: {weights} (official download if absent)')
         print(env['device_message']); print(cfg['batch_strategy'])
         print(f'TRAIN fraction={cfg["fraction"]}; full VALID; TEST LOCKED; workers requested={cfg["workers"]}')
         model = model_factory(str(weights))
+=======
+        weights = resume_checkpoint if resume else root/'results/model_cache'/cfg['model']
+        if not resume:
+            weights.parent.mkdir(parents=True,exist_ok=True)
+        print(f'Checkpoint: {weights}' + (' (resume)' if resume else ' (official download if absent)'))
+        print(env['device_message']); print(cfg['batch_strategy'])
+        print(f'TRAIN fraction={cfg["fraction"]}; full VALID; TEST LOCKED; workers requested={cfg["workers"]}')
+        model = model_factory(str(weights))
+        if resume:
+            checkpoint = getattr(model, 'ckpt', None)
+            if not isinstance(checkpoint, dict) or type(checkpoint.get('epoch')) is not int or checkpoint['epoch'] < 0:
+                raise ValueError('Cannot resume: last.pt does not contain a valid training epoch.')
+            if checkpoint.get('optimizer') is None:
+                raise ValueError('Cannot resume: last.pt does not contain optimizer state.')
+            rows_before_resume = result_rows(out)
+            if len(rows_before_resume) != checkpoint['epoch'] + 1:
+                raise ValueError(
+                    'Cannot resume: checkpoint epoch does not match results.csv; '
+                    'preserve the original artifacts and inspect the interrupted run.'
+                )
+            arguments['resume'] = True
+>>>>>>> 6aa8d52 (Initial commit)
         metadata['pretrained_checkpoint_parameter_count'] = sum(p.numel() for p in model.model.parameters())
         def record_arguments(trainer):
             resolved_args = json.loads(json.dumps(vars(trainer.args),default=str))
@@ -207,7 +314,11 @@ def train(cfg, env, snapshot, overwrite=False, root=PROJECT_ROOT, model_factory=
             if (out/'results.csv').is_file():
                 metadata['epochs_completed'] = len(result_rows(out))
             metadata['end_time'] = datetime.now(timezone.utc).isoformat()
+<<<<<<< HEAD
             metadata['duration_seconds'] = round(time.monotonic()-start,3)
+=======
+            metadata['duration_seconds'] = round((metadata.get('duration_seconds') or 0)+time.monotonic()-start,3)
+>>>>>>> 6aa8d52 (Initial commit)
             write_json(out/'experiment.json',metadata)
     print(f'{"SMOKE TEST" if smoke else "FULL BASELINE TRAINING"}: PASS\nOutput: {out}')
     return metadata
@@ -223,6 +334,10 @@ def main(argv=None):
     parser.add_argument('--workers',type=int)
     parser.add_argument('--epochs',type=int)
     parser.add_argument('--overwrite',action='store_true')
+<<<<<<< HEAD
+=======
+    parser.add_argument('--resume',action='store_true',help='Continue an interrupted baseline from its validated last.pt.')
+>>>>>>> 6aa8d52 (Initial commit)
     args=parser.parse_args(argv)
     overrides={k:getattr(args,k) for k in ('device','batch','workers','epochs') if getattr(args,k) is not None}
     if args.smoke_test and args.epochs is not None:
@@ -231,7 +346,11 @@ def main(argv=None):
         cfg,env,snapshot=preflight(args.config,overrides,args.smoke_test)
         print_plan(cfg,env,snapshot)
         if not args.dry_run:
+<<<<<<< HEAD
             train(cfg,env,snapshot,args.overwrite)
+=======
+            train(cfg,env,snapshot,args.overwrite,resume=args.resume)
+>>>>>>> 6aa8d52 (Initial commit)
         return 0
     except (ImportError,OSError,ValueError,RuntimeError,KeyError) as error:
         print(f'BASELINE PIPELINE: FAIL\n{error}')

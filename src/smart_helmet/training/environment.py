@@ -21,6 +21,13 @@ def resolve_device(requested, torch):
         return str(torch.cuda.current_device()), 'Using the current CUDA device.'
     if str(requested) == 'cpu':
         return 'cpu', 'CPU explicitly selected.'
+<<<<<<< HEAD
+=======
+    if str(requested) == 'cuda':
+        if not available:
+            raise ValueError('Requested CUDA device unavailable. Use --device cpu or auto; single GPU only.')
+        return str(torch.cuda.current_device()), 'Using the current CUDA device.'
+>>>>>>> 6aa8d52 (Initial commit)
     value = str(requested).removeprefix('cuda:')
     if not value.isdigit() or not available or int(value) >= torch.cuda.device_count():
         raise ValueError('Requested CUDA device unavailable. Use --device cpu or auto; single GPU only.')

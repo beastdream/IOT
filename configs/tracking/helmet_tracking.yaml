@@ -1,0 +1,19 @@
+# Project tracker for helmet video inference; tuned on a TRAIN demo video only
+# (scripts/evaluate_tracking.py), reported on VALID. TEST stays locked.
+tracker_type: bytetrack
+track_high_thresh: 0.25
+track_low_thresh: 0.1
+new_track_thresh: 0.25
+# Lost tracks are kept 1 s regardless of FPS (framework default is a fixed 30 frames).
+track_buffer_seconds: 1.0
+match_thresh: 0.8
+fuse_score: true
+# One box per head: per-class NMS can emit overlapping With/Without boxes that become two IDs.
+agnostic_nms: true
+# Hard-cut reset so a similar object in a new scene cannot inherit an old ID.
+# TRAIN demo: same-scene mean grey diff <= 8.4, cuts >= 27.5; correlation catches colour changes.
+scene_cut_hist_corr: 0.6
+scene_cut_mean_diff: 25
+# Confidence-weighted per-track class vote; a one-frame flip does not change the label.
+class_smoothing: 0.7
+class_hysteresis: 0.05

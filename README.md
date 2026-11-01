@@ -1,6 +1,7 @@
 # SMART HELMET DETECTION SYSTEM
 
-Current Phase: **IMAGE PHASE — PRE-TRAINING CURATION SANITY CHECK (3C)**.
+
+Current Phase: **LOCAL IMAGE AND VIDEO INFERENCE CLI**.
 
 Task: helmet status detection from head regions. Current classes are exactly
 `0 = With Helmet` and `1 = Without Helmet`. See [dataset contract](docs/dataset_contract.md).
@@ -8,11 +9,13 @@ Task: helmet status detection from head regions. Current classes are exactly
 ## Scope and status
 
 Image dataset → Dataset Audit → Dataset Cleaning → Dataset Analysis → Baseline
-Training → Experiments → Evaluation → Failure Analysis → Image Inference → Local Database.
 
-Foundation, the read-only Dataset Audit pipeline and cleaning review preparation
-are implemented, along with explicit P0-only curated builds after human review.
-Video, model training, database and cloud integration are not implemented.
+Training → Experiments → Evaluation → Failure Analysis → Image/Video Inference.
+
+Foundation, dataset audit/curation, baseline training/evaluation, failure analysis,
+and local image/video inference CLIs are implemented. GUI, database, and cloud
+integration are not included.
+
 
 | Split | Images |
 | --- | ---: |
@@ -25,9 +28,14 @@ Dataset folders remain directly at the checkout root. Original `data.yaml`,
 `README.dataset.txt`, `README.roboflow.txt`, images and labels are preserved.
 Metrics mentioned in Roboflow README files are **not metrics of this project**.
 
+The project has local baseline training/evaluation tooling and image/video
+inference CLIs. No GUI, database, or cloud integration is included. Inference
+uses only a local trained checkpoint and never downloads a generic detector.
+
 ## Setup and verification
 
-Use Python 3.11 or newer. The inspected interpreter was Python 3.11.9.
+Use Python 3.11 or newer.
+
 From the project root in PowerShell:
 
 ```powershell
@@ -441,3 +449,166 @@ YAML omits TEST. TRAIN appears only to satisfy the framework dataset schema; inf
 and metric evaluation select VALID exclusively. To rerun intentionally, use
 `--overwrite`: evaluation archives the entire old evaluation directory; failure
 analysis archives its own generated outputs while preserving metric artifacts.
+
+## Local image and video inference
+
+Inference is provided as a CLI because this project has no GUI. It reuses the
+Ultralytics dependency from the existing `training` extra and requires an actual
+local helmet checkpoint. The default is
+`results/experiments/A_baseline/weights/best.pt`; no weight file is currently
+tracked or downloaded automatically. The checkpoint must preserve class IDs
+`0 = With Helmet`, `1 = Without Helmet`.
+
+Install the project's test and training extras in the active environment:
+
+```powershell
+python -m pip install -e ".[test,training]"
+python scripts/check_gpu.py
+```
+
+For GPU troubleshooting, `nvidia-smi` reports the NVIDIA driver/device when
+available. Check what the active Python environment can actually use with:
+
+```powershell
+python -c "import torch; print(torch.__version__); print(torch.cuda.is_available()); print(torch.version.cuda)"
+```
+
+`torch.version.cuda` is the CUDA version used to build the PyTorch package; it
+does not identify a separately installed CUDA Toolkit. Install a CUDA-enabled
+PyTorch build only after checking the NVIDIA driver and compatibility guidance
+on the [official PyTorch installation selector](https://pytorch.org/get-started/locally/).
+For example, a CPU-only PyTorch build reports no CUDA support; this is an
+environment limitation, not a hardware limitation of the code. `--device auto`
+selects CPU in that case. `--device cuda` fails explicitly unless the active
+PyTorch runtime reports CUDA as available.
+
+Run image inference:
+
+```powershell
+python scripts/predict_image.py --source "C:\path\to\image.jpg" --device auto
+python scripts/predict_image.py --source "C:\path\to\image.png" --weights "C:\path\to\best.pt" --conf 0.40 --imgsz 640 --device cpu
+```
+
+Run video inference:
+
+```powershell
+python scripts/predict_video.py --source "C:\path\to\video.mp4" --device auto
+python scripts/predict_video.py --source "C:\path\to\video.avi" --weights "C:\path\to\best.pt" --conf 0.40 --imgsz 640 --device cuda
+```
+
+Both tools accept `--device auto`, `cpu`, `cuda`, or `cuda:<index>`. Only `auto`
+falls back to CPU. `--conf`, `--imgsz`, `--weights`, `--output`, and explicit
+`--overwrite` are supported; videos also support `--max-frames`. Output defaults
+to `results/predictions/image/` or `results/predictions/video/` and receives a
+non-colliding name. Video frames are processed sequentially with batch size one,
+preserving frame order, dimensions, and source FPS. Progress reports frame counts
+and average processing FPS. OpenCV `VideoWriter` does not copy source audio, so
+the output is silent. The CLI reports this explicitly.
+
+If the default checkpoint is absent, use the existing protected baseline flow
+after curated-v1 training readiness passes:
+
+```powershell
+python scripts/check_training_readiness.py
+python scripts/train_baseline.py --dry-run --device auto
+python scripts/train_baseline.py --smoke-test --device auto
+python scripts/train_baseline.py --device auto
+```
+
+The last command must complete successfully before
+`results/experiments/A_baseline/weights/best.pt` can be used. No inference
+accuracy is claimed by the CLI itself; evaluate the produced checkpoint using
+the existing VALID evaluation workflow.
+
+If a full baseline run is interrupted, preserve its output directory and resume
+only after checking the dataset/environment preflight again:
+
+```powershell
+python scripts/check_training_readiness.py
+python scripts/check_training_environment.py
+python scripts/train_baseline.py --resume --device auto
+```
+
+Resume validates the saved experiment metadata, raw/curated fingerprints,
+checkpoint optimizer state, and checkpoint/results epoch alignment. It continues
+from the existing `last.pt` without archiving or replacing the run directory.
+Use `--resume` only for an interrupted baseline, not a smoke test or a completed
+run.
+
+## GPU environment (RTX 50-series / Blackwell)
+
+The system Python ships a CPU-only PyTorch. The project `.venv` overrides it with
+a CUDA build; Blackwell GPUs (compute capability 12.0) need a CUDA 12.8+ wheel.
+The verified setup on an RTX 5050 Laptop GPU (driver 592.00) is:
+
+```powershell
+python -m venv --system-site-packages .venv
+.\.venv\Scripts\python.exe -m pip install --no-deps --ignore-installed "torch==2.14.1+cu130" "torchvision==0.29.1+cu130" --index-url https://download.pytorch.org/whl/cu130
+.\.venv\Scripts\python.exe -m pip install --no-deps --no-build-isolation -e .
+.\.venv\Scripts\python.exe -m pip install pytest
+.\.venv\Scripts\python.exe scripts/check_gpu.py
+```
+
+`check_gpu.py` must report `Auto selection: cuda:0`. On this GPU AMP checks pass
+and AutoBatch resolves batch 24 at 416px; one baseline epoch takes about 4-5 s
+(versus about 9 min on CPU). A CPU run cannot be resumed on GPU because resume
+requires the identical torch version and device; the interrupted 50-epoch CPU run
+is preserved as `results/experiments/A_baseline_cpu_archive_20261029/`.
+
+## Demo video from project images
+
+No external footage is used. `make_demo_video.py` builds an MP4 from curated-v1
+images (TRAIN or VALID only; TEST stays locked). Each image is letterboxed and
+shown for one second with a gentle centre zoom, so consecutive frames differ.
+
+```powershell
+.\.venv\Scripts\python.exe scripts/make_demo_video.py --split val --shuffle-seed 42
+.\.venv\Scripts\python.exe scripts/predict_video.py --source results/predictions/video_sources/demo_val.mp4 --imgsz 416 --device cuda
+```
+
+Use `--imgsz 416` to match the baseline training resolution. VALID images were used
+for model selection, so detections on this demo are a functional check of the
+video pipeline, not an unbiased accuracy estimate.
+
+## Video tracking (persistent IDs)
+
+`predict_video.py` tracks objects by default with `configs/tracking/helmet_tracking.yaml`
+(ByteTrack association from Ultralytics, wrapped by `smart_helmet.inference.tracking`).
+Boxes show `#ID confidence`; colour encodes the class (legend bottom-left). Use
+`--no-track` for the previous per-frame mode and `--tracker <yaml>` for another config.
+With tracking, `--conf` sets the tracker's confident-match/new-track threshold.
+
+The project wrapper fixes problems measured with the default trackers:
+
+| Problem | Fix |
+| --- | --- |
+| A similar object in a new scene inherits the previous object's ID | Scene-cut detection (colour-histogram correlation < 0.6 or mean grey change > 25) resets association |
+| Framework reset restarts IDs at 1, so IDs get reissued | Display IDs come from a project counter and are never reused |
+| Per-class NMS gives one head overlapping With/Without boxes, i.e. two IDs | Class-agnostic NMS in tracking mode |
+| Shown class flickers frame to frame | Confidence-weighted per-track vote (decay 0.7, hysteresis 0.05) |
+| Lost-track memory is a fixed frame count | `track_buffer_seconds` converted with the source FPS |
+
+Measure ID and label stability against exact ground truth from a demo-video manifest:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/make_demo_video.py --split val --shuffle-seed 42 --output results/predictions/video_sources/tracking_val.mp4
+.\.venv\Scripts\python.exe scripts/evaluate_tracking.py --manifest results/predictions/video_sources/tracking_val.json --config configs/tracking/bytetrack_default.yaml --config configs/tracking/botsort_default.yaml --config configs/tracking/helmet_tracking.yaml --device cuda
+```
+
+Matching is class-agnostic Hungarian at IoU >= 0.5. `id_transfers` counts an ID moving
+onto a different object (`scene_id_transfers`: onto an object of another scene);
+`id_switches` is the CLEAR-MOT count; `class_flips` counts shown-class changes.
+Tracker settings were tuned on a 200-image TRAIN demo video only. VALID results
+(127 scenes, 300 objects, 15 FPS; A_baseline best.pt):
+
+| Config | Recall | ID transfers | ID switches | Class flips | MOTA |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| per-frame (no IDs) | 0.779 | - | - | 97 | 0.577 |
+| ByteTrack default | 0.718 | 39 | 37 | 91 | 0.547 |
+| BoT-SORT default | 0.724 | 17 | 33 | 95 | 0.558 |
+| helmet_tracking | 0.778 | 0 | 12 | 31 | 0.615 |
+
+The slideshow demo has hard cuts and synthetic zoom only; it does not model real
+occlusion or people crossing paths. VALID images were used for detector model
+selection, so these are pipeline-stability measurements, not unbiased accuracy.
+

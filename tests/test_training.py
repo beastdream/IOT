@@ -44,6 +44,8 @@ def test_device_auto_cpu_gpu_and_batch():
     assert env.resolve_batch('auto','cpu',True)[0]==2
     torch.cuda.is_available.return_value=True;torch.cuda.current_device.return_value=1;torch.cuda.device_count.return_value=2
     assert env.resolve_device('auto',torch)[0]=='1'
+    assert env.resolve_device('cuda',torch)[0]=='1'
+    assert env.resolve_device('cuda:0',torch)[0]=='0'
     assert env.resolve_batch('auto','1',True)[0]==-1
     assert env.resolve_batch('auto','1',False)[0]==2
     assert env.resolve_batch('8','cpu',True)[0]==8
@@ -131,6 +133,71 @@ def test_missing_best_is_failure(setup,tmp_path):
     metadata=json.loads((tmp_path/'results/experiments/A_baseline/experiment.json').read_text())
     assert metadata['training_status']=='FAIL' and metadata['dataset_immutability']=='PASS'
 
+def test_resume_continues_matching_interrupted_run_without_archiving(setup,tmp_path):
+    run_fake(setup,tmp_path)
+    run_fake(setup,tmp_path,False)
+    out=tmp_path/'results/experiments/A_baseline'
+    metadata=json.loads((out/'experiment.json').read_text())
+    original_start=metadata['start_time']
+    metadata['training_status']='RUNNING'
+    metadata['end_time']=None
+    metadata['duration_seconds']=None
+    ex.write_json(out/'experiment.json',metadata)
+
+    class ResumeModel(FakeModel):
+        def __init__(self,path):
+            super().__init__(path)
+            self.ckpt={'epoch':1,'optimizer':{'state':{}}}
+        def train(self,**kwargs):
+            assert kwargs['resume'] is True
+            self.calls.append(kwargs)
+            out=Path(kwargs['project'])/kwargs['name']
+            (out/'weights/last.pt').write_bytes(b'resumed')
+            (out/'weights/best.pt').write_bytes(b'resumed')
+            (out/'results.csv').write_text('epoch,metrics/mAP50(B)\n1,0.5\n2,0.6\n3,0.7\n')
+            self.callbacks['on_pretrain_routine_end'](SimpleNamespace(
+                args=SimpleNamespace(**kwargs),batch_size=kwargs['batch'],model=self.model,
+                optimizer=SimpleNamespace(param_groups=[{'lr':0.001667,'params':[]}]),
+            ))
+            return SimpleNamespace(results_dict={'metrics/mAP50(B)':0.7})
+
+    path,runtime,snapshot=setup
+    cfg,_,_=tr.preflight(path,root=tmp_path)
+    model=ResumeModel(str(out/'weights/last.pt'))
+    result=tr.train(
+        cfg,runtime,snapshot,root=tmp_path,model_factory=lambda _:model,
+        cache_context=lambda _:nullcontext(),resume=True,
+    )
+    assert result['training_status']=='PASS'
+    assert result['epochs_completed']==3
+    assert result['resume_count']==1
+    assert result['start_time']==original_start
+    assert model.calls[0]['resume'] is True
+    assert not list(out.parent.glob('A_baseline_archive_*'))
+
+
+def test_resume_rejects_checkpoint_without_optimizer_and_preserves_output(setup,tmp_path):
+    run_fake(setup,tmp_path)
+    run_fake(setup,tmp_path,False)
+    out=tmp_path/'results/experiments/A_baseline'
+    metadata=json.loads((out/'experiment.json').read_text())
+    metadata['training_status']='RUNNING'
+    ex.write_json(out/'experiment.json',metadata)
+
+    class NotResumable(FakeModel):
+        def __init__(self,path):
+            super().__init__(path)
+            self.ckpt={'epoch':1,'optimizer':None}
+
+    path,runtime,snapshot=setup
+    cfg,_,_=tr.preflight(path,root=tmp_path)
+    with pytest.raises(ValueError,match='optimizer state'):
+        tr.train(
+            cfg,runtime,snapshot,root=tmp_path,model_factory=NotResumable,
+            cache_context=lambda _:nullcontext(),resume=True,
+        )
+    assert (out/'results.csv').is_file()
+    assert not list(out.parent.glob('A_baseline_archive_*'))
 
 def test_overwrite_archives_preserves_artifacts(tmp_path):
     out=ex.output_path(tmp_path,'A_baseline');ex.prepare_output(out)
