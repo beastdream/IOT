@@ -1,0 +1,45 @@
+schema_version: 1
+label: EXPLORATORY VALIDATION BUDGETS
+split: val
+test_status: LOCKED / NOT USED
+primary_class: Without Helmet
+primary_objective: maximize_recall
+production_policy: false
+selection_tiebreak: [higher_precision, lower_overall_fp, lower_without_helmet_fp, higher_threshold]
+same_cost_max_fp_count_difference: 1
+decision_rule: >-
+  Compare independently recall-maximized feasible points. Both realized FP counts
+  must differ by at most one detection. Prefer a model only for strictly higher
+  target recall and no lower target precision. If just one model is feasible,
+  prefer that model on feasibility; if neither is feasible, NO_FEASIBLE_POINT.
+  Otherwise NO_CLEAR_ADVANTAGE. Never relax constraints.
+same_cost_pair_rule: >-
+  Among feasible pairs within one detection on BOTH FP counts, maximize the
+  smaller target recall, then the larger target recall, then minimize combined
+  overall FP and target FP, then choose higher A and B thresholds. This is a
+  descriptive matched-cost example, not a replacement policy optimum.
+rationale: >-
+  Round, progressively relaxed hypothetical limits illustrate high precision,
+  intermediate alert load, and recall-oriented exploration. No external deployment
+  requirements were supplied. Values and rules were written before Phase 4H
+  evaluation and will not be revised in response to winners. Phase 4G results
+  were already known, so this is not independent preregistration or held-out evidence.
+modes:
+  STRICT:
+    rationale: High precision and low target and total alert burden.
+    constraints:
+      minimum_without_helmet_precision: 0.90
+      maximum_without_helmet_fp_per_image: 0.05
+      maximum_overall_fp_per_image: 0.20
+  BALANCED:
+    rationale: Intermediate precision and alert burden for a descriptive middle scenario.
+    constraints:
+      minimum_without_helmet_precision: 0.75
+      maximum_without_helmet_fp_per_image: 0.15
+      maximum_overall_fp_per_image: 0.40
+  RECALL_ORIENTED:
+    rationale: Allow more false alerts and lower precision while retaining explicit cost caps.
+    constraints:
+      minimum_without_helmet_precision: 0.60
+      maximum_without_helmet_fp_per_image: 0.35
+      maximum_overall_fp_per_image: 0.75

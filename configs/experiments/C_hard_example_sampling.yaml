@@ -1,0 +1,26 @@
+experiment_name: C_hard_example_sampling
+baseline_reference: A_baseline
+difficulty_source: TRAIN_ONLY
+sampling_plan_path: results/hard_example_mining/A_baseline_train/sampling_plan.json
+sampling_strategy: runtime_weighted_sampling_with_replacement
+replacement: true
+num_samples: 1158
+tier_weights:
+  TIER_0_EASY: 1.0
+  TIER_1_MODERATE: 1.3333333333333333
+  TIER_2_HARD: 1.6666666666666665
+  TIER_3_CRITICAL: 2.0
+human_review_requirement: post_human_review_PASS_pending_0_REVIEW_MORE_0
+suspicious_exclusion_policy: baseline_weight_1_keep_image_and_label
+data: configs/data.curated.v1.yaml
+model: yolo11n.pt
+imgsz: 416
+batch: 4
+workers: 0
+seed: 42
+epochs: 100
+patience: 20
+pretrained: true
+deterministic: true
+cache: false
+device: auto
