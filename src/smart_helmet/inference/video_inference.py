@@ -99,6 +99,7 @@ def process_video(
     overwrite: bool = False,
     progress_callback: ProgressCallback | None = None,
     tracking: TrackingConfig | None = None,
+    preview: bool = False,
 ) -> VideoInferenceResult:
     """Annotate a video sequentially; output video is silent (audio is not copied).
 
@@ -106,9 +107,15 @@ def process_video(
     object carries a persistent ID and a per-track smoothed class; ``confidence`` is
     then unused (apply it via ``TrackingConfig.with_confidence``).
     """
-    video_path = Path(source).expanduser().resolve()
-    if not video_path.is_file():
-        raise FileNotFoundError(f"Input video not found: {video_path}")
+    source_str = str(source).strip()
+    is_cam = source_str.isdigit() or source_str.lower() in ("webcam", "camera")
+    if is_cam:
+        cam_idx = int(source_str) if source_str.isdigit() else 0
+        video_path = Path(f"webcam_{cam_idx}.mp4")
+    else:
+        video_path = Path(source).expanduser().resolve()
+        if not video_path.is_file():
+            raise FileNotFoundError(f"Input video not found: {video_path}")
     if not 0 <= confidence <= 1:
         raise ValueError("Confidence threshold must be between 0 and 1.")
     if image_size <= 0:
@@ -119,7 +126,7 @@ def process_video(
     cv2 = _opencv()
     selection = device if isinstance(device, DeviceInfo) else resolve_device(device)
     target, codec = _make_output_path(video_path, output, overwrite)
-    capture = cv2.VideoCapture(str(video_path))
+    capture = cv2.VideoCapture(cam_idx if is_cam else str(video_path))
     writer = None
     processed = 0
     detections = 0
@@ -132,12 +139,15 @@ def process_video(
     completed = False
     try:
         if not capture.isOpened():
-            raise ValueError(f"OpenCV could not open the input video: {video_path}")
+            raise ValueError(f"OpenCV could not open the input source: {source}")
 
         source_fps = float(capture.get(cv2.CAP_PROP_FPS))
         if not math.isfinite(source_fps) or source_fps <= 0:
-            raise ValueError("Input video does not report a valid FPS; cannot preserve playback speed.")
-        raw_total = float(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+            if is_cam:
+                source_fps = 30.0
+            else:
+                raise ValueError("Input video does not report a valid FPS; cannot preserve playback speed.")
+        raw_total = float(capture.get(cv2.CAP_PROP_FRAME_COUNT)) if not is_cam else 0.0
         total_frames = int(raw_total) if math.isfinite(raw_total) and raw_total > 0 else None
         ok, frame = capture.read()
         if not ok or frame is None:
@@ -180,6 +190,12 @@ def process_video(
                 track_ids.update(item.track_id for item in objects)
                 annotated, count = draw_tracks(frame, objects, cv2)
             writer.write(annotated)
+            if preview and hasattr(cv2, "imshow"):
+                cv2.imshow("Smart Helmet Detection - Video Preview (Q/ESC to stop)", annotated)
+                key = cv2.waitKey(1) & 0xFF
+                if key in (27, ord('q'), ord('Q')):
+                    LOGGER.info("User stopped video preview.")
+                    break
             detections += count
             processed += 1
             if processed == 1:
@@ -197,6 +213,11 @@ def process_video(
             raise OSError(f"Video writer produced no output file at {target}")
         completed = True
     finally:
+        if preview and hasattr(cv2, "destroyAllWindows"):
+            try:
+                cv2.destroyAllWindows()
+            except Exception:
+                pass
         if writer is not None:
             writer.release()
         capture.release()

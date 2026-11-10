@@ -7,8 +7,8 @@ import numpy as np
 from . import CLASS_NAMES
 
 CLASS_COLORS = {
-    0: (40, 180, 40),
-    1: (30, 80, 230),
+    0: (0, 200, 0),    # With Helmet: Màu Xanh lá cây (Green in BGR)
+    1: (0, 0, 255),    # Without Helmet: Màu Đỏ tươi (Red in BGR)
 }
 
 
@@ -65,7 +65,8 @@ def draw_tracks(
     for item in objects:
         if item.class_id not in CLASS_NAMES:
             raise ValueError(f"Tracker returned unsupported class ID {item.class_id}.")
-        _draw_box(annotated, item.xyxy, item.class_id, f"#{item.track_id} {item.confidence:.2f}", cv2_module)
+        label = f"ID:{item.track_id} | {CLASS_NAMES[item.class_id]} {item.confidence:.2f}"
+        _draw_box(annotated, item.xyxy, item.class_id, label, cv2_module)
         count += 1
     _draw_legend(annotated, cv2_module)
     return annotated, count

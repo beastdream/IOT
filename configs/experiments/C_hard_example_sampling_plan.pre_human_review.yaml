@@ -1,0 +1,338 @@
+train_images: 1158
+effective_epoch_samples: 1158
+seed: 42
+epoch_seed: 42 + zero-based epoch
+sampling_strategy: runtime_weighted_sampling_with_replacement
+plan_only: true
+training_authorized: false
+difficulty_source: TRAIN_ONLY
+tier_counts:
+  TIER_0_EASY: 1001
+  TIER_1_MODERATE: 120
+  TIER_2_HARD: 35
+  TIER_3_CRITICAL: 2
+proposed_tier_weights:
+  TIER_0_EASY: 1.0
+  TIER_1_MODERATE: 1.3333333333333333
+  TIER_2_HARD: 1.6666666666666665
+  TIER_3_CRITICAL: 2.0
+weight_rule: w_t=1+t*min(0.10*N/sum(n_t*t),1/3); t in {0,1,2,3}; if no hard images
+  all weights 1
+weight_rule_rationale: 'One fixed TRAIN-count-driven proposal: additional unnormalized
+  mass <=10% of uniform mass and maximum relative per-image weight <=2. Severity ranks
+  preserve tier order; no VALID tuning. These safety budgets are design assumptions,
+  not empirically optimal weights.'
+extra_sampling_mass_fraction: 0.056419113413931805
+expected_tier_fraction:
+  TIER_0_EASY: 0.8182561307901792
+  TIER_1_MODERATE: 0.13079019073569492
+  TIER_2_HARD: 0.04768392370572205
+  TIER_3_CRITICAL: 0.0032697547683923716
+expected_tier_draws:
+  TIER_0_EASY: 947.5405994550275
+  TIER_1_MODERATE: 151.45504087193473
+  TIER_2_HARD: 55.217983651226135
+  TIER_3_CRITICAL: 3.7863760217983664
+expected_class_exposure:
+  With Helmet: 2112.482288828361
+  Without Helmet: 1132.1264305177112
+baseline_class_exposure:
+  With Helmet: 2009
+  Without Helmet: 1038
+expected_unique_images_per_epoch: 728.2399385927765
+baseline_without_replacement_unique: 1158
+uniform_replacement_expected_unique: 732.1796130570792
+effective_sample_size: 1134.1276524082302
+maximum_expected_draws_per_image: 1.8931880108991832
+maximum_expected_additional_repeats: 0.8931880108991832
+theoretical_maximum_sample_count_one_image: 1158
+simulated_epoch_zero_maximum_sample_count: 5
+simulated_epoch_zero_unique_images: 747
+top_10_most_frequently_expected_images:
+- image: data/curated/v1/train/images/BikesHelmets640_png_jpg.rf.2f18f68d53ba710b6cc1d23577397aa7.jpg
+  tier: TIER_3_CRITICAL
+  expected_draws: 1.8931880108991832
+  probability: 0.0016348773841961858
+  simulated_epoch_zero_count: 2
+- image: data/curated/v1/train/images/BikesHelmets733_png_jpg.rf.dbecb6d1bba5027627173a3d50ddc7f8.jpg
+  tier: TIER_3_CRITICAL
+  expected_draws: 1.8931880108991832
+  probability: 0.0016348773841961858
+  simulated_epoch_zero_count: 1
+- image: data/curated/v1/train/images/BikesHelmets109_png_jpg.rf.6dca663f1d05434c2fe2511a3391af51.jpg
+  tier: TIER_2_HARD
+  expected_draws: 1.577656675749319
+  probability: 0.001362397820163488
+  simulated_epoch_zero_count: 1
+- image: data/curated/v1/train/images/BikesHelmets143_png_jpg.rf.029adf2058fa20395be098041444de45.jpg
+  tier: TIER_2_HARD
+  expected_draws: 1.577656675749319
+  probability: 0.001362397820163488
+  simulated_epoch_zero_count: 3
+- image: data/curated/v1/train/images/BikesHelmets143_png_jpg.rf.44cd7808572096e2956247b17af144dd.jpg
+  tier: TIER_2_HARD
+  expected_draws: 1.577656675749319
+  probability: 0.001362397820163488
+  simulated_epoch_zero_count: 1
+- image: data/curated/v1/train/images/BikesHelmets143_png_jpg.rf.8290ee8e8ac3bc7082d41914b7997cb3.jpg
+  tier: TIER_2_HARD
+  expected_draws: 1.577656675749319
+  probability: 0.001362397820163488
+  simulated_epoch_zero_count: 1
+- image: data/curated/v1/train/images/BikesHelmets154_png_jpg.rf.38aa08f3b7559b50261fbe478d23b405.jpg
+  tier: TIER_2_HARD
+  expected_draws: 1.577656675749319
+  probability: 0.001362397820163488
+  simulated_epoch_zero_count: 3
+- image: data/curated/v1/train/images/BikesHelmets154_png_jpg.rf.6b9b3451d102f2f91ffdf50c4ebb9400.jpg
+  tier: TIER_2_HARD
+  expected_draws: 1.577656675749319
+  probability: 0.001362397820163488
+  simulated_epoch_zero_count: 1
+- image: data/curated/v1/train/images/BikesHelmets171_png_jpg.rf.1ea27d2a20371a928c24cfba29da3dc3.jpg
+  tier: TIER_2_HARD
+  expected_draws: 1.577656675749319
+  probability: 0.001362397820163488
+  simulated_epoch_zero_count: 0
+- image: data/curated/v1/train/images/BikesHelmets182_png_jpg.rf.b77ba5e1b926ef16e5c6c8f2ecbf13ee.jpg
+  tier: TIER_2_HARD
+  expected_draws: 1.577656675749319
+  probability: 0.001362397820163488
+  simulated_epoch_zero_count: 0
+exposure_scope: Primary image draws only; unchanged mosaic auxiliary draws are not
+  included. Expected object exposure counts GT occurrences, not unique objects.
+diversity_caveat: Replacement sampling reduces per-epoch unique images versus A without
+  replacement; probabilities bound expected concentration, not realized repeat counts.
+  No hard repeat cap is claimed.
+within_tier_priority: Without Helmet hard objects prioritized for review; equal image
+  weight within a tier avoids adding another class multiplier.
+dominance_risk: PASS
+dominance_rule: FAIL if maximum expected draws >3 or a <=5% tier exceeds 20% epoch
+  mass; WARNING if maximum expected draws >2 or expected unique <60% of N; otherwise
+  PASS. Heuristic safety guard, not a generalization guarantee.
+deterministic: PASS
+valid_leakage: 0
+test_leakage: 0
+no_disk_image_duplication: true
+experiment_name: C_hard_example_sampling
+baseline_reference: A_baseline
+mining_model: A_baseline
+baseline_constants:
+  model: YOLO11n
+  imgsz: 416
+  batch: 4
+  workers: 0
+  seed: 42
+  epochs: 100
+  patience: 20
+  pretrained: true
+baseline_constants_preserved: true
+baseline_resolved_training_arguments:
+  task: detect
+  mode: train
+  model: D:\IOT\results\model_cache\yolo11n.pt
+  data: D:\IOT\results\experiments\A_baseline\training_data.yaml
+  epochs: 100
+  time: null
+  patience: 20
+  batch: 4
+  imgsz: 416
+  save: true
+  save_period: -1
+  cache: false
+  device: '0'
+  workers: 0
+  project: D:\IOT\results\experiments
+  name: A_baseline
+  exist_ok: true
+  pretrained: true
+  cls_remap: true
+  optimizer: auto
+  verbose: true
+  seed: 42
+  deterministic: true
+  single_cls: false
+  rect: false
+  cos_lr: false
+  close_mosaic: 10
+  resume: false
+  amp: true
+  fraction: 1.0
+  profile: false
+  freeze: null
+  multi_scale: 0.0
+  compile: false
+  channels_last: false
+  overlap_mask: true
+  mask_ratio: 4
+  dropout: 0.0
+  val: true
+  split: val
+  save_json: false
+  conf: null
+  iou: 0.7
+  max_det: 300
+  quantize: null
+  dnn: false
+  plots: true
+  end2end: null
+  source: null
+  vid_stride: 1
+  stream_buffer: false
+  visualize: false
+  augment: false
+  agnostic_nms: false
+  classes: null
+  retina_masks: false
+  embed: null
+  show: false
+  save_frames: false
+  save_txt: false
+  save_conf: false
+  save_crop: false
+  show_labels: true
+  show_conf: true
+  show_boxes: true
+  line_width: null
+  format: torchscript
+  keras: false
+  optimize: false
+  dynamic: false
+  simplify: true
+  opset: null
+  workspace: null
+  nms: false
+  lr0: 0.01
+  lrf: 0.01
+  momentum: 0.937
+  weight_decay: 0.0005
+  warmup_epochs: 3.0
+  warmup_momentum: 0.8
+  warmup_bias_lr: 0.0
+  distill_model: null
+  dis: 6.0
+  box: 7.5
+  cls: 0.5
+  cls_pw: 0.0
+  dfl: 1.5
+  pose: 12.0
+  kobj: 1.0
+  rle: 1.0
+  angle: 1.0
+  dlog: 1.0
+  dgrad: 0.5
+  dlam: 1.0
+  nbs: 64
+  hsv_h: 0.015
+  hsv_s: 0.7
+  hsv_v: 0.4
+  degrees: 0.0
+  translate: 0.1
+  scale: 0.5
+  shear: 0.0
+  perspective: 0.0
+  flipud: 0.0
+  fliplr: 0.5
+  bgr: 0.0
+  mosaic: 1.0
+  mixup: 0.0
+  cutmix: 0.0
+  copy_paste: 0.0
+  copy_paste_mode: flip
+  auto_augment: randaugment
+  erasing: 0.4
+  cfg: null
+  tracker: tracktrack.yaml
+  save_dir: D:\IOT\results\experiments\A_baseline
+baseline_experiment_sha256: b6dca320bff18d4b3069d68945a8e39a78e9f23cf9c76c515e9787710242518c
+baseline_actual_optimizer: AdamW
+baseline_optimizer_initial_parameter_groups:
+- lr: 0.001667
+  betas:
+  - 0.9
+  - 0.999
+  weight_decay: 0.0005
+  param_group: weight
+  eps: 1.0e-08
+  amsgrad: false
+  maximize: false
+  foreach: null
+  capturable: false
+  differentiable: false
+  fused: null
+  decoupled_weight_decay: true
+  initial_lr: 0.001667
+- lr: 0.001667
+  betas:
+  - 0.9
+  - 0.999
+  weight_decay: 0.0
+  param_group: bn
+  eps: 1.0e-08
+  amsgrad: false
+  maximize: false
+  foreach: null
+  capturable: false
+  differentiable: false
+  fused: null
+  decoupled_weight_decay: true
+  initial_lr: 0.001667
+- lr: 0.001667
+  betas:
+  - 0.9
+  - 0.999
+  weight_decay: 0.0
+  param_group: bias
+  eps: 1.0e-08
+  amsgrad: false
+  maximize: false
+  foreach: null
+  capturable: false
+  differentiable: false
+  fused: null
+  decoupled_weight_decay: true
+  initial_lr: 0.001667
+optimizer_preservation: Preserve actual A AdamW behavior and initial parameter groups,
+  not just optimizer=auto text; future integration must verify resolved arguments
+  before any training.
+pretrained_preservation: Start C from the same original yolo11n.pt pretrained initialization
+  as A; mining best.pt is NOT the C initialization.
+tier_definitions:
+  TIER_0_EASY: No hard GT
+  TIER_1_MODERATE: Low confidence / localization / duplicate context
+  TIER_2_HARD: Class confusion / match competition
+  TIER_3_CRITICAL: No meaningful correct-class proposal
+primary_hypothesis: A small set of persistently hard TRAIN images may be under-exposed
+  relative to easy images. Increasing their runtime exposure may improve robustness
+  more efficiently than weighting every Without Helmet image. Hypothesis, not proven.
+primary_change: TRAIN sampling exposure based solely on frozen-A TRAIN difficulty
+primary_metric:
+  name: Without Helmet Recall
+  baseline: 0.530435
+secondary_metrics:
+  Without Helmet Precision: 0.734479
+  Without Helmet mAP50: 0.64111
+  Overall Precision: 0.779936
+  Overall mAP50: 0.754705
+success_safeguards: Use the same A framework validation procedure first; require target
+  recall improvement and report all precision/AP deltas. Conservative descriptive
+  non-degradation checks (delta >=0) for listed safeguards define a candidate, not
+  significance. Any decrease prevents automatic usefulness/promotion and requires
+  explicit trade-off review; no post-hoc tolerance tuning. Also require improved recovery
+  of prior VALID hard cases at unchanged diagnostic settings without hiding regressions.
+  Do not train from VALID identities.
+evaluation_policy: No confidence tuning alongside C. Same framework evaluation as
+  A, same VALID split. TEST locked. At most one primary C configuration, except technical
+  invalidation.
+test_status: LOCKED
+validation_overuse_warning: true
+mining_prediction_sha256: 7f4098d7265339b3fcdd90419899e29b00ad3300eb8f3c48a16f505509f56f45
+mining_image_csv_sha256: 378cc8eab29cc0ea6575655458366fcc328cba56a6c6c4be76c468d3fec20bfd
+dataset_fingerprint: 21aaddca0ce81e712810f849a838d54593bdc6d54b8f92d271454047495f745a
+raw_fingerprint: dc1045516a8fe3049166717c4cefa1468d1676f0a5f2ff645b2ba924349746ff
+manual_review_status: PENDING
+ready_for_experiment_c_implementation: false
+ready_for_experiment_c_training: false
+implementation_gate: Complete targeted semantic review and resolve invalid annotations/mining
+  bugs without modifying the frozen dataset; then verify sampler/trainer integration
+  in the next phase. No trainer attached in Phase 4I.

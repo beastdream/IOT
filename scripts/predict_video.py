@@ -2,7 +2,9 @@
 
 import argparse
 import logging
+import os
 from pathlib import Path
+import sys
 
 from smart_helmet.inference.device import resolve_device
 from smart_helmet.inference.model_loader import load_model
@@ -10,25 +12,39 @@ from smart_helmet.inference.tracking import TrackingConfig
 from smart_helmet.inference.video_inference import process_video
 from smart_helmet.paths import EXPERIMENTS_DIR, PROJECT_ROOT
 
-DEFAULT_WEIGHTS = EXPERIMENTS_DIR / "A_baseline" / "weights" / "best.pt"
+# Prefer the best model available (Colab downloaded, Experiment C, or Baseline A)
+def _resolve_default_weights() -> Path:
+    candidates = [
+        PROJECT_ROOT / "weights" / "best.pt",
+        EXPERIMENTS_DIR / "C_hard_example_sampling" / "weights" / "best.pt",
+        EXPERIMENTS_DIR / "A_baseline" / "weights" / "best.pt",
+    ]
+    for c in candidates:
+        if c.is_file():
+            return c
+    return candidates[-1]
+
+DEFAULT_WEIGHTS = _resolve_default_weights()
 DEFAULT_TRACKER = PROJECT_ROOT / "configs" / "tracking" / "helmet_tracking.yaml"
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Detect helmet status frame-by-frame in a video.")
-    parser.add_argument("--source", required=True, type=Path, help="Input video path.")
+    parser.add_argument("--source", required=True, type=str, help="Input video path or webcam index (e.g. 0).")
     parser.add_argument("--weights", type=Path, default=DEFAULT_WEIGHTS, help="Trained local best.pt.")
     parser.add_argument("--output", type=Path, help="Output .mp4 or .avi; defaults to results/predictions/video.")
     parser.add_argument(
         "--conf", type=float,
         help="Confidence threshold in [0, 1]; default 0.25 without tracking, tracker config with tracking.",
     )
-    parser.add_argument("--imgsz", type=int, default=640, help="Inference image size.")
+    parser.add_argument("--imgsz", type=int, default=416, help="Inference image size (default 416).")
     parser.add_argument("--device", default="auto", help="auto, cpu, cuda, or cuda:<index>.")
     parser.add_argument("--max-frames", type=int, help="Optional positive limit for processed frames.")
     parser.add_argument("--overwrite", action="store_true", help="Allow replacing an explicit output file.")
     parser.add_argument("--tracker", type=Path, default=DEFAULT_TRACKER, help="Tracking config YAML.")
     parser.add_argument("--no-track", action="store_true", help="Per-frame detection without persistent IDs.")
+    parser.add_argument("--view", action="store_true", help="Show live annotated video window while processing.")
+    parser.add_argument("--open", action="store_true", help="Automatically open the annotated video when done.")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -65,6 +81,7 @@ def main(argv: list[str] | None = None) -> int:
             overwrite=args.overwrite,
             progress_callback=report_progress,
             tracking=tracking,
+            preview=args.view,
         )
     except (FileNotFoundError, FileExistsError, ImportError, OSError, RuntimeError, ValueError) as error:
         logging.error("Video inference failed: %s", error)
@@ -80,6 +97,18 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Inference device: {result.device}" + (" (verified)" if result.device_verified else " (requested)"))
     print("Audio: not preserved by OpenCV output.")
     print(f"Output: {result.output}")
+
+    if args.open and result.output.is_file():
+        try:
+            print(f"Opening video output: {result.output}")
+            if sys.platform == "win32":
+                os.startfile(result.output)
+            else:
+                import subprocess
+                subprocess.Popen(["xdg-open", str(result.output)])
+        except Exception as open_err:
+            logging.warning("Could not automatically open video: %s", open_err)
+
     return 0
 
 
